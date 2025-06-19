@@ -176,22 +176,29 @@
             });
             
             // Reset Keys button functionality
-            document.getElementById('resetKeysBtn').addEventListener('click', function() {
-				// Преобразуем ключи
-				pairs.forEach(pair => {
-					const match = pair.key.match(/^(.+?)_slash_(.+?)_gml_(\d+)_\d+$/);
+            document.getElementById('resetKeysBtn').addEventListener('click', function () {
+				const currentPairs = pairs.map(pair => {
+					const match = pair.key.match(/^(.+?)_slash_(.+?)_gml_(\d+)(?:_(\d+))?$/);
+					let newKey = pair.key;
 					if (match) {
 						const prefix = match[1];
-						const id = match[3];
-						pair.key = `${prefix}_dialogue_${id}`;
+						const mainId = match[3];
+						const subId = match[4];
+
+						if (!subId || subId === '0') {
+							newKey = `${prefix}_dialogue_${mainId}`;
+						} else {
+							newKey = `${prefix}_dialogue_${mainId}_${subId}`;
+						}
 					}
+					return { ...pair, key: newKey };
 				});
 
-				// Полностью перестроим DOM в правильном порядке
+				// Очистка DOM
 				const existingElements = keyValuePairs.querySelectorAll('[data-id]');
 				existingElements.forEach(el => el.remove());
 
-				const currentPairs = [...pairs];
+				// Перестройка пар
 				pairs = [];
 				currentPairs.forEach(pair => {
 					addPair(pair.key, pair.value);
@@ -199,7 +206,6 @@
 
 				updatePreview();
 			});
-
 
 
             // Copy JSON to clipboard
