@@ -242,7 +242,7 @@
             
             // Add a new key-value pair
             function addPair(key, value) {
-                const id = Date.now();
+                const id = crypto.randomUUID ? crypto.randomUUID() : Date.now() + '_' + Math.random();
                 const pair = { id, key, value, event: 'none' };
                 pairs.push(pair);
                 
