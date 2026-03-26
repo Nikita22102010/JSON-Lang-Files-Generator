@@ -6,20 +6,16 @@
 <script src="https://cdn.tailwindcss.com"></script>
 </head>
 
-<body class="bg-gray-100 min-h-screen p-6">
+<body class="bg-gray-100 min-h-screen p-6 pb-32">
 
 <div class="max-w-6xl mx-auto bg-white p-6 rounded shadow">
     <h1 class="text-2xl font-bold mb-4">JSON Key-Value Editor (GameMaker)</h1>
 
-    <div class="flex items-center gap-4 mb-4">
+    <div class="flex flex-wrap items-center gap-4 mb-4">
         <label class="flex items-center gap-2">
             <input type="checkbox" id="gmCheckbox">
             Used with GameMaker
         </label>
-
-        <button id="addBtn" class="px-4 py-2 bg-blue-600 text-white rounded">
-            + Add Pair
-        </button>
 
         <button id="saveBtn" class="px-4 py-2 bg-green-600 text-white rounded">
             Save JSON
@@ -27,6 +23,10 @@
 
         <button id="loadBtn" class="px-4 py-2 bg-yellow-500 text-white rounded">
             Load JSON
+        </button>
+
+        <button id="sortBtn" class="px-4 py-2 bg-purple-600 text-white rounded">
+            Auto Sort
         </button>
 
         <input type="file" id="fileInput" class="hidden" accept=".json">
@@ -43,6 +43,12 @@
     <pre id="preview" class="bg-gray-100 p-4 rounded text-sm mt-2"></pre>
 </div>
 
+<!-- FIXED ADD BUTTON -->
+<button id="addBtn"
+    class="fixed bottom-6 right-6 px-6 py-3 bg-blue-600 text-white rounded-full shadow-lg z-50">
+    + Add Pair
+</button>
+
 <script>
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -52,11 +58,13 @@ const pairsContainer = document.getElementById('pairs');
 const preview = document.getElementById('preview');
 const saveBtn = document.getElementById('saveBtn');
 const loadBtn = document.getElementById('loadBtn');
+const sortBtn = document.getElementById('sortBtn');
 const fileInput = document.getElementById('fileInput');
 const fileNameInput = document.getElementById('fileNameInput');
 
 let pairs = [];
 let loadedFileName = '';
+let draggedEl = null;
 
 const resourceTypes = {
     Object: 'gml_Object_',
@@ -71,42 +79,13 @@ const baseEvents = {
     Step: { needsIndex: false, format: 'Step_0' },
     EndStep: { needsIndex: false, format: 'Step_2' },
     Draw: { needsIndex: false, format: 'Draw_0' },
-
     Alarm: { needsIndex: true, format: i => `Alarm_${i}` },
     User: { needsIndex: true, format: i => `User_${i}` }
 };
 
-/* ---------- UI ---------- */
+/* ---------- ADD PAIR ---------- */
 addBtn.addEventListener('click', () => addPair());
 
-gmCheckbox.addEventListener('change', () => {
-    document.querySelectorAll('.pair').forEach(el => {
-        const isGM = gmCheckbox.checked;
-        el.querySelectorAll('.gm-only').forEach(gmEl => {
-            gmEl.classList.toggle('hidden', !isGM);
-        });
-
-        const resourceType = el.querySelector('.resourceType')?.value || 'Object';
-        const eventType = el.querySelector('.eventType')?.value;
-        const eventBox = el.querySelector('.event-box');
-        const indexBox = el.querySelector('.index-box');
-
-        if (resourceType !== 'Object') {
-            eventBox?.classList.add('hidden');
-            indexBox?.classList.add('hidden');
-        } else {
-            eventBox?.classList.toggle('hidden', !isGM);
-            const needsIndex = baseEvents[eventType]?.needsIndex || false;
-            indexBox?.classList.toggle('hidden', !needsIndex || !isGM);
-        }
-
-        const pairId = el.dataset.id;
-        const pairObj = pairs.find(p => p.id === pairId);
-        if (pairObj) updateKey(pairObj);
-    });
-});
-
-/* ---------- ADD PAIR ---------- */
 function addPair(initial = {}) {
     const id = crypto.randomUUID();
 
@@ -125,21 +104,20 @@ function addPair(initial = {}) {
     const el = document.createElement('div');
     el.className = 'border p-4 rounded bg-gray-50 pair';
     el.dataset.id = id;
+    el.draggable = true;
 
     el.innerHTML = `
     <div class="grid grid-cols-1 md:grid-cols-6 gap-3">
-
         <div>
             <label class="text-sm">Resource</label>
-            <input class="resource w-full border rounded px-2 py-1"
-                   placeholder="KEY_OR_RESOURCE" value="${pair.resource}">
+            <input class="resource w-full border rounded px-2 py-1" value="${pair.resource}">
         </div>
 
         <div class="gm-only hidden">
             <label class="text-sm">Resource Type</label>
             <select class="resourceType w-full border rounded px-2 py-1">
                 ${Object.keys(resourceTypes).map(r =>
-                    `<option value="${r}" ${pair.resourceType===r?'selected':''}>${r}</option>`
+                    `<option ${pair.resourceType===r?'selected':''}>${r}</option>`
                 ).join('')}
             </select>
         </div>
@@ -148,23 +126,19 @@ function addPair(initial = {}) {
             <label class="text-sm">Event</label>
             <select class="eventType w-full border rounded px-2 py-1">
                 ${Object.keys(baseEvents).map(e =>
-                    `<option value="${e}" ${pair.eventType===e?'selected':''}>${e}</option>`
+                    `<option ${pair.eventType===e?'selected':''}>${e}</option>`
                 ).join('')}
             </select>
         </div>
 
         <div class="gm-only hidden index-box">
             <label class="text-sm">Index</label>
-            <input type="number"
-                   class="eventIndex w-full border rounded px-2 py-1"
-                   value="${pair.eventIndex}" min="0" max="9">
+            <input type="number" class="eventIndex w-full border rounded px-2 py-1" value="${pair.eventIndex}">
         </div>
 
         <div class="gm-only hidden">
             <label class="text-sm">Line ID</label>
-            <input type="number"
-                   class="lineId w-full border rounded px-2 py-1"
-                   value="${pair.lineId}" min="0">
+            <input type="number" class="lineId w-full border rounded px-2 py-1" value="${pair.lineId}">
         </div>
 
         <div>
@@ -172,148 +146,135 @@ function addPair(initial = {}) {
             <input class="value w-full border rounded px-2 py-1" value="${pair.value}">
         </div>
     </div>
-
     <button class="mt-3 text-red-600 delete">Delete</button>
     `;
 
     pairsContainer.appendChild(el);
 
-    const resource = el.querySelector('.resource');
-    const resourceType = el.querySelector('.resourceType');
-    const eventType = el.querySelector('.eventType');
-    const eventIndex = el.querySelector('.eventIndex');
-    const eventBox = el.querySelector('.event-box');
-    const indexBox = el.querySelector('.index-box');
-    const lineId = el.querySelector('.lineId');
-    const value = el.querySelector('.value');
-    const del = el.querySelector('.delete');
-
-    resource.addEventListener('input', () => { pair.resource = resource.value.trim(); updateKey(pair); });
-    resourceType?.addEventListener('change', () => { 
-        pair.resourceType = resourceType.value;
-        const isObject = pair.resourceType === 'Object';
-        eventBox?.classList.toggle('hidden', !isObject || !gmCheckbox.checked);
-        indexBox?.classList.toggle('hidden', !isObject || !baseEvents[pair.eventType].needsIndex || !gmCheckbox.checked);
-        updateKey(pair); 
-    });
-    eventType?.addEventListener('change', () => {
-        pair.eventType = eventType.value;
-        indexBox?.classList.toggle('hidden', !baseEvents[pair.eventType].needsIndex || !gmCheckbox.checked);
-        updateKey(pair);
-    });
-    eventIndex?.addEventListener('input', () => {
-        let val = parseInt(eventIndex.value); if (isNaN(val) || val < 0) val = 0; if (val > 9) val = 9;
-        eventIndex.value = val; pair.eventIndex = val; updateKey(pair);
-    });
-    lineId?.addEventListener('input', () => { let val = parseInt(lineId.value); if (isNaN(val) || val < 0) val = 1; lineId.value = val; pair.lineId = val; updateKey(pair); });
-    value.addEventListener('input', () => { pair.value = value.value; updatePreview(); });
-    del.addEventListener('click', () => { pairs = pairs.filter(p => p.id !== id); el.remove(); updatePreview(); });
+    el.querySelector('.resource').oninput = e => { pair.resource = e.target.value; updateKey(pair); };
+    el.querySelector('.resourceType').onchange = e => { pair.resourceType = e.target.value; updateKey(pair); };
+    el.querySelector('.eventType').onchange = e => { pair.eventType = e.target.value; updateKey(pair); };
+    el.querySelector('.eventIndex').oninput = e => { pair.eventIndex = +e.target.value || 0; updateKey(pair); };
+    el.querySelector('.lineId').oninput = e => { pair.lineId = +e.target.value || 1; updateKey(pair); };
+    el.querySelector('.value').oninput = e => { pair.value = e.target.value; updatePreview(); };
+    el.querySelector('.delete').onclick = () => {
+        pairs = pairs.filter(p => p.id !== id);
+        el.remove();
+        updatePreview();
+    };
 
     if (gmCheckbox.checked) gmCheckbox.dispatchEvent(new Event('change'));
     updateKey(pair);
+
+    setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
 }
 
+/* ---------- GM MODE ---------- */
+gmCheckbox.onchange = () => {
+    document.querySelectorAll('.gm-only').forEach(e =>
+        e.classList.toggle('hidden', !gmCheckbox.checked)
+    );
+    pairs.forEach(updateKey);
+};
+
+/* ---------- KEY + PREVIEW ---------- */
 function updateKey(pair) {
-    if (!gmCheckbox.checked) { pair.key = pair.resource; updatePreview(); return; }
-    const prefix = resourceTypes[pair.resourceType];
-    let key = prefix + pair.resource;
-    if (pair.resourceType === 'Object') {
-        const evt = baseEvents[pair.eventType];
-        const eventPart = evt.needsIndex ? evt.format(pair.eventIndex) : evt.format;
-        key += `_${eventPart}`;
+    if (!gmCheckbox.checked) {
+        pair.key = pair.resource;
+    } else {
+        let key = resourceTypes[pair.resourceType] + pair.resource;
+        if (pair.resourceType === 'Object') {
+            const evt = baseEvents[pair.eventType];
+            key += '_' + (evt.needsIndex ? evt.format(pair.eventIndex) : evt.format);
+        }
+        key += `_line_${pair.lineId}_0`;
+        pair.key = key;
     }
-    key += `_line_${pair.lineId}_0`;
-    pair.key = key;
     updatePreview();
 }
 
 function updatePreview() {
     const obj = {};
-    pairs.forEach(p => { if (p.key) obj[p.key] = p.value; });
+    pairs.forEach(p => p.key && (obj[p.key] = p.value));
     preview.textContent = JSON.stringify(obj, null, 4);
 }
 
-/* ---------- SAVE JSON ---------- */
-saveBtn.addEventListener('click', () => {
-    const data = {};
-    pairs.forEach(p => { if (p.key) data[p.key] = p.value; });
-    let fileName = fileNameInput.value.trim();
-    if (!fileName) fileName = loadedFileName || 'data';
-    if (!fileName.toLowerCase().endsWith('.json')) fileName += '.json';
-    const blob = new Blob([JSON.stringify(data, null, 4)], {type: 'application/json'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = fileName; a.click();
-    URL.revokeObjectURL(url);
+/* ---------- DRAG & DROP ---------- */
+pairsContainer.addEventListener('dragstart', e => {
+    if (!e.target.classList.contains('pair')) return;
+    draggedEl = e.target;
+    e.target.classList.add('opacity-50');
 });
 
-/* ---------- LOAD JSON ---------- */
-loadBtn.addEventListener('click', () => fileInput.click());
+pairsContainer.addEventListener('dragend', () => {
+    draggedEl?.classList.remove('opacity-50');
+    draggedEl = null;
+    syncPairsFromDOM();
+});
 
-fileInput.addEventListener('change', (e) => {
+pairsContainer.addEventListener('dragover', e => {
+    e.preventDefault();
+    const after = [...pairsContainer.children].find(el =>
+        e.clientY < el.getBoundingClientRect().top + el.offsetHeight / 2
+    );
+    after ? pairsContainer.insertBefore(draggedEl, after) : pairsContainer.appendChild(draggedEl);
+});
+
+function syncPairsFromDOM() {
+    const ids = [...pairsContainer.children].map(e => e.dataset.id);
+    pairs = ids.map(id => pairs.find(p => p.id === id));
+    updatePreview();
+}
+
+/* ---------- AUTO SORT ---------- */
+sortBtn.onclick = () => {
+    pairs.sort((a, b) => smartCompare(a.key, b.key));
+    pairsContainer.innerHTML = '';
+    pairs.forEach(p => pairsContainer.appendChild(
+        document.querySelector(`.pair[data-id="${p.id}"]`)
+    ));
+    updatePreview();
+};
+
+function smartCompare(a, b) {
+    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+}
+
+/* ---------- SAVE / LOAD ---------- */
+saveBtn.onclick = () => {
+    const obj = {};
+    pairs.forEach(p => p.key && (obj[p.key] = p.value));
+    let name = fileNameInput.value || loadedFileName || 'data';
+    if (!name.endsWith('.json')) name += '.json';
+    const blob = new Blob([JSON.stringify(obj, null, 4)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+};
+
+loadBtn.onclick = () => fileInput.click();
+
+fileInput.onchange = e => {
     const file = e.target.files[0];
     if (!file) return;
     loadedFileName = file.name.replace(/\.json$/i,'');
     fileNameInput.value = loadedFileName;
+
     const reader = new FileReader();
     reader.onload = () => {
-        try {
-            const data = JSON.parse(reader.result);
-            pairsContainer.innerHTML = '';
-            pairs = [];
-            let gmDetected = false;
-
-            for (let key in data) {
-                // GM-ключи формата: gml_<Type>_<Name>_line_<LineId>_0
-                const gmMatch = key.match(/^gml_(Object|Script|Room|Timeline)_(.+)_line_(\d+)_0$/);
-                if (gmMatch) {
-                    let [_, resType, resName, lineId] = gmMatch;
-                    let eventType='Create', eventIndex=0;
-
-                    if(resType === 'Object') {
-                        const evtMatch = resName.match(/(.+)_([A-Za-z]+(?:_\d)?|Alarm_\d|User_\d)$/);
-                        if(evtMatch) {
-                            resName = evtMatch[1];
-                            const evtStr = evtMatch[2];
-                            for(let evt in baseEvents){
-                                const format = baseEvents[evt].format;
-                                if(typeof format==='function' && evtStr.startsWith(evt)) { 
-                                    eventType=evt; 
-                                    eventIndex=parseInt(evtStr.split('_')[1]); 
-                                } else if(format===evtStr){ 
-                                    eventType=evt; 
-                                    eventIndex=0; 
-                                }
-                            }
-                        }
-                    }
-
-                    addPair({
-                        resource: resName,
-                        resourceType: resType,
-                        eventType,
-                        eventIndex,
-                        lineId: parseInt(lineId),
-                        value: data[key]
-                    });
-                    gmDetected = true;
-                } else {
-                    addPair({resource: key, value: data[key]});
-                }
-            }
-
-            if (gmDetected) { gmCheckbox.checked = true; gmCheckbox.dispatchEvent(new Event('change')); }
-        } catch(err) {
-            alert('Invalid JSON');
-        }
+        pairsContainer.innerHTML = '';
+        pairs = [];
+        const data = JSON.parse(reader.result);
+        Object.entries(data).forEach(([k,v]) => addPair({ resource: k, value: v }));
     };
     reader.readAsText(file);
-});
+};
 
 /* ---------- INIT ---------- */
 addPair();
 
 });
 </script>
-
 </body>
 </html>
