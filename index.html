@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>JSON GM Dialogue Editor</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 min-h-screen p-6">
+
+<div class="max-w-6xl mx-auto bg-white p-6 rounded shadow">
+    <h1 class="text-2xl font-bold mb-4">JSON Key-Value Editor (GameMaker)</h1>
+
+    <div class="flex items-center gap-4 mb-4">
+        <label class="flex items-center gap-2">
+            <input type="checkbox" id="gmCheckbox">
+            Used with GameMaker
+        </label>
+
+        <button id="addBtn" class="px-4 py-2 bg-blue-600 text-white rounded">
+            + Add Pair
+        </button>
+
+        <button id="saveBtn" class="px-4 py-2 bg-green-600 text-white rounded">
+            Save JSON
+        </button>
+
+        <button id="loadBtn" class="px-4 py-2 bg-yellow-500 text-white rounded">
+            Load JSON
+        </button>
+
+        <input type="file" id="fileInput" class="hidden" accept=".json">
+
+        <div>
+            <label class="text-sm">File Name</label>
+            <input type="text" id="fileNameInput" class="border rounded px-2 py-1" placeholder="data">
+        </div>
+    </div>
+
+    <div id="pairs" class="space-y-3"></div>
+
+    <h2 class="mt-6 font-semibold">JSON Preview</h2>
+    <pre id="preview" class="bg-gray-100 p-4 rounded text-sm mt-2"></pre>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+
+const gmCheckbox = document.getElementById('gmCheckbox');
+const addBtn = document.getElementById('addBtn');
+const pairsContainer = document.getElementById('pairs');
+const preview = document.getElementById('preview');
+const saveBtn = document.getElementById('saveBtn');
+const loadBtn = document.getElementById('loadBtn');
+const fileInput = document.getElementById('fileInput');
+const fileNameInput = document.getElementById('fileNameInput');
+
+let pairs = [];
+let loadedFileName = '';
+
+const resourceTypes = {
+    Object: 'gml_Object_',
+    Script: 'gml_Script_',
+    Room: 'gml_Room_',
+    Timeline: 'gml_Timeline_'
+};
+
+const baseEvents = {
+    Create: { needsIndex: false, format: 'Create_0' },
+    BeginStep: { needsIndex: false, format: 'Step_1' },
+    Step: { needsIndex: false, format: 'Step_0' },
+    EndStep: { needsIndex: false, format: 'Step_2' },
+    Draw: { needsIndex: false, format: 'Draw_0' },
+
+    Alarm: { needsIndex: true, format: i => `Alarm_${i}` },
+    User: { needsIndex: true, format: i => `User_${i}` }
+};
+
+/* ---------- UI ---------- */
+addBtn.addEventListener('click', () => addPair());
+
+gmCheckbox.addEventListener('change', () => {
+    document.querySelectorAll('.pair').forEach(el => {
+        const isGM = gmCheckbox.checked;
+        el.querySelectorAll('.gm-only').forEach(gmEl => {
+            gmEl.classList.toggle('hidden', !isGM);
+        });
+
+        const resourceType = el.querySelector('.resourceType')?.value || 'Object';
+        const eventType = el.querySelector('.eventType')?.value;
+        const eventBox = el.querySelector('.event-box');
+        const indexBox = el.querySelector('.index-box');
+
+        if (resourceType !== 'Object') {
+            eventBox?.classList.add('hidden');
+            indexBox?.classList.add('hidden');
+        } else {
+            eventBox?.classList.toggle('hidden', !isGM);
+            const needsIndex = baseEvents[eventType]?.needsIndex || false;
+            indexBox?.classList.toggle('hidden', !needsIndex || !isGM);
+        }
+
+        const pairId = el.dataset.id;
+        const pairObj = pairs.find(p => p.id === pairId);
+        if (pairObj) updateKey(pairObj);
+    });
+});
+
+/* ---------- ADD PAIR ---------- */
+function addPair(initial = {}) {
+    const id = crypto.randomUUID();
+
+    const pair = {
+        id,
+        resource: initial.resource || '',
+        resourceType: initial.resourceType || 'Object',
+        eventType: initial.eventType || 'Create',
+        eventIndex: initial.eventIndex ?? 0,
+        lineId: initial.lineId ?? 1,
+        value: initial.value || '',
+        key: ''
+    };
+    pairs.push(pair);
+
+    const el = document.createElement('div');
+    el.className = 'border p-4 rounded bg-gray-50 pair';
+    el.dataset.id = id;
+
+    el.innerHTML = `
+    <div class="grid grid-cols-1 md:grid-cols-6 gap-3">
+
+        <div>
+            <label class="text-sm">Resource</label>
+            <input class="resource w-full border rounded px-2 py-1"
+                   placeholder="KEY_OR_RESOURCE" value="${pair.resource}">
+        </div>
+
+        <div class="gm-only hidden">
+            <label class="text-sm">Resource Type</label>
+            <select class="resourceType w-full border rounded px-2 py-1">
+                ${Object.keys(resourceTypes).map(r =>
+                    `<option value="${r}" ${pair.resourceType===r?'selected':''}>${r}</option>`
+                ).join('')}
+            </select>
+        </div>
+
+        <div class="gm-only hidden event-box">
+            <label class="text-sm">Event</label>
+            <select class="eventType w-full border rounded px-2 py-1">
+                ${Object.keys(baseEvents).map(e =>
+                    `<option value="${e}" ${pair.eventType===e?'selected':''}>${e}</option>`
+                ).join('')}
+            </select>
+        </div>
+
+        <div class="gm-only hidden index-box">
+            <label class="text-sm">Index</label>
+            <input type="number"
+                   class="eventIndex w-full border rounded px-2 py-1"
+                   value="${pair.eventIndex}" min="0" max="9">
+        </div>
+
+        <div class="gm-only hidden">
+            <label class="text-sm">Line ID</label>
+            <input type="number"
+                   class="lineId w-full border rounded px-2 py-1"
+                   value="${pair.lineId}" min="0">
+        </div>
+
+        <div>
+            <label class="text-sm">Value</label>
+            <input class="value w-full border rounded px-2 py-1" value="${pair.value}">
+        </div>
+    </div>
+
+    <button class="mt-3 text-red-600 delete">Delete</button>
+    `;
+
+    pairsContainer.appendChild(el);
+
+    const resource = el.querySelector('.resource');
+    const resourceType = el.querySelector('.resourceType');
+    const eventType = el.querySelector('.eventType');
+    const eventIndex = el.querySelector('.eventIndex');
+    const eventBox = el.querySelector('.event-box');
+    const indexBox = el.querySelector('.index-box');
+    const lineId = el.querySelector('.lineId');
+    const value = el.querySelector('.value');
+    const del = el.querySelector('.delete');
+
+    resource.addEventListener('input', () => { pair.resource = resource.value.trim(); updateKey(pair); });
+    resourceType?.addEventListener('change', () => { 
+        pair.resourceType = resourceType.value;
+        const isObject = pair.resourceType === 'Object';
+        eventBox?.classList.toggle('hidden', !isObject || !gmCheckbox.checked);
+        indexBox?.classList.toggle('hidden', !isObject || !baseEvents[pair.eventType].needsIndex || !gmCheckbox.checked);
+        updateKey(pair); 
+    });
+    eventType?.addEventListener('change', () => {
+        pair.eventType = eventType.value;
+        indexBox?.classList.toggle('hidden', !baseEvents[pair.eventType].needsIndex || !gmCheckbox.checked);
+        updateKey(pair);
+    });
+    eventIndex?.addEventListener('input', () => {
+        let val = parseInt(eventIndex.value); if (isNaN(val) || val < 0) val = 0; if (val > 9) val = 9;
+        eventIndex.value = val; pair.eventIndex = val; updateKey(pair);
+    });
+    lineId?.addEventListener('input', () => { let val = parseInt(lineId.value); if (isNaN(val) || val < 0) val = 1; lineId.value = val; pair.lineId = val; updateKey(pair); });
+    value.addEventListener('input', () => { pair.value = value.value; updatePreview(); });
+    del.addEventListener('click', () => { pairs = pairs.filter(p => p.id !== id); el.remove(); updatePreview(); });
+
+    if (gmCheckbox.checked) gmCheckbox.dispatchEvent(new Event('change'));
+    updateKey(pair);
+}
+
+function updateKey(pair) {
+    if (!gmCheckbox.checked) { pair.key = pair.resource; updatePreview(); return; }
+    const prefix = resourceTypes[pair.resourceType];
+    let key = prefix + pair.resource;
+    if (pair.resourceType === 'Object') {
+        const evt = baseEvents[pair.eventType];
+        const eventPart = evt.needsIndex ? evt.format(pair.eventIndex) : evt.format;
+        key += `_${eventPart}`;
+    }
+    key += `_line_${pair.lineId}_0`;
+    pair.key = key;
+    updatePreview();
+}
+
+function updatePreview() {
+    const obj = {};
+    pairs.forEach(p => { if (p.key) obj[p.key] = p.value; });
+    preview.textContent = JSON.stringify(obj, null, 4);
+}
+
+/* ---------- SAVE JSON ---------- */
+saveBtn.addEventListener('click', () => {
+    const data = {};
+    pairs.forEach(p => { if (p.key) data[p.key] = p.value; });
+    let fileName = fileNameInput.value.trim();
+    if (!fileName) fileName = loadedFileName || 'data';
+    if (!fileName.toLowerCase().endsWith('.json')) fileName += '.json';
+    const blob = new Blob([JSON.stringify(data, null, 4)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = fileName; a.click();
+    URL.revokeObjectURL(url);
+});
+
+/* ---------- LOAD JSON ---------- */
+loadBtn.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    loadedFileName = file.name.replace(/\.json$/i,'');
+    fileNameInput.value = loadedFileName;
+    const reader = new FileReader();
+    reader.onload = () => {
+        try {
+            const data = JSON.parse(reader.result);
+            pairsContainer.innerHTML = '';
+            pairs = [];
+            let gmDetected = false;
+
+            for (let key in data) {
+                // GM-ключи формата: gml_<Type>_<Name>_line_<LineId>_0
+                const gmMatch = key.match(/^gml_(Object|Script|Room|Timeline)_(.+)_line_(\d+)_0$/);
+                if (gmMatch) {
+                    let [_, resType, resName, lineId] = gmMatch;
+                    let eventType='Create', eventIndex=0;
+
+                    if(resType === 'Object') {
+                        const evtMatch = resName.match(/(.+)_([A-Za-z]+(?:_\d)?|Alarm_\d|User_\d)$/);
+                        if(evtMatch) {
+                            resName = evtMatch[1];
+                            const evtStr = evtMatch[2];
+                            for(let evt in baseEvents){
+                                const format = baseEvents[evt].format;
+                                if(typeof format==='function' && evtStr.startsWith(evt)) { 
+                                    eventType=evt; 
+                                    eventIndex=parseInt(evtStr.split('_')[1]); 
+                                } else if(format===evtStr){ 
+                                    eventType=evt; 
+                                    eventIndex=0; 
+                                }
+                            }
+                        }
+                    }
+
+                    addPair({
+                        resource: resName,
+                        resourceType: resType,
+                        eventType,
+                        eventIndex,
+                        lineId: parseInt(lineId),
+                        value: data[key]
+                    });
+                    gmDetected = true;
+                } else {
+                    addPair({resource: key, value: data[key]});
+                }
+            }
+
+            if (gmDetected) { gmCheckbox.checked = true; gmCheckbox.dispatchEvent(new Event('change')); }
+        } catch(err) {
+            alert('Invalid JSON');
+        }
+    };
+    reader.readAsText(file);
+});
+
+/* ---------- INIT ---------- */
+addPair();
+
+});
+</script>
+
+</body>
+</html>
