@@ -97,7 +97,7 @@ function addPair(initial = {}) {
         eventIndex: initial.eventIndex ?? 0,
         lineId: initial.lineId ?? 1,
         value: initial.value || '',
-        key: ''
+        key: initial.key || ''
     };
     pairs.push(pair);
 
@@ -107,43 +107,40 @@ function addPair(initial = {}) {
     el.draggable = true;
 
     el.innerHTML = `
-    <div class="grid grid-cols-1 md:grid-cols-6 gap-3">
-        <div>
-            <label class="text-sm">Resource</label>
-            <input class="resource w-full border rounded px-2 py-1" value="${pair.resource}">
+    <div class="grid grid-cols-1 md:grid-cols-8 gap-3 items-end">
+        <div class="col-span-3">
+            <label class="text-sm">Key</label>
+            <input class="key w-full border rounded px-2 py-1 bg-white" value="${pair.key}">
         </div>
 
-        <div class="gm-only hidden">
+        <div class="col-span-3">
+            <label class="text-sm">Value</label>
+            <input class="value w-full border rounded px-2 py-1" value="${pair.value}">
+        </div>
+
+        <div class="col-span-2 gm-only hidden flex flex-col gap-2">
+            <label class="text-sm">Resource</label>
+            <input class="resource w-full border rounded px-2 py-1" value="${pair.resource}">
+
             <label class="text-sm">Resource Type</label>
             <select class="resourceType w-full border rounded px-2 py-1">
                 ${Object.keys(resourceTypes).map(r =>
                     `<option ${pair.resourceType===r?'selected':''}>${r}</option>`
                 ).join('')}
             </select>
-        </div>
 
-        <div class="gm-only hidden event-box">
             <label class="text-sm">Event</label>
             <select class="eventType w-full border rounded px-2 py-1">
                 ${Object.keys(baseEvents).map(e =>
                     `<option ${pair.eventType===e?'selected':''}>${e}</option>`
                 ).join('')}
             </select>
-        </div>
 
-        <div class="gm-only hidden index-box">
             <label class="text-sm">Index</label>
             <input type="number" class="eventIndex w-full border rounded px-2 py-1" value="${pair.eventIndex}">
-        </div>
 
-        <div class="gm-only hidden">
             <label class="text-sm">Line ID</label>
             <input type="number" class="lineId w-full border rounded px-2 py-1" value="${pair.lineId}">
-        </div>
-
-        <div>
-            <label class="text-sm">Value</label>
-            <input class="value w-full border rounded px-2 py-1" value="${pair.value}">
         </div>
     </div>
     <button class="mt-3 text-red-600 delete">Delete</button>
@@ -151,20 +148,55 @@ function addPair(initial = {}) {
 
     pairsContainer.appendChild(el);
 
-    el.querySelector('.resource').oninput = e => { pair.resource = e.target.value; updateKey(pair); };
-    el.querySelector('.resourceType').onchange = e => { pair.resourceType = e.target.value; updateKey(pair); };
-    el.querySelector('.eventType').onchange = e => { pair.eventType = e.target.value; updateKey(pair); };
-    el.querySelector('.eventIndex').oninput = e => { pair.eventIndex = +e.target.value || 0; updateKey(pair); };
-    el.querySelector('.lineId').oninput = e => { pair.lineId = +e.target.value || 1; updateKey(pair); };
-    el.querySelector('.value').oninput = e => { pair.value = e.target.value; updatePreview(); };
-    el.querySelector('.delete').onclick = () => {
+    // Event listeners
+    el.querySelector('.key').addEventListener('input', e => { 
+        pair.key = e.target.value; 
+        updatePreview(); 
+    });
+
+    el.querySelector('.value').addEventListener('input', e => { 
+        pair.value = e.target.value; 
+        updatePreview(); 
+    });
+
+    const updateAutoKey = () => {
+        if (!el.querySelector('.key').value && pair.resource) updateKey(pair);
+    };
+
+    el.querySelector('.resource')?.addEventListener('input', e => { 
+        pair.resource = e.target.value; 
+        updateAutoKey();
+    });
+
+    el.querySelector('.resourceType')?.addEventListener('change', e => { 
+        pair.resourceType = e.target.value; 
+        updateAutoKey();
+    });
+
+    el.querySelector('.eventType')?.addEventListener('change', e => { 
+        pair.eventType = e.target.value; 
+        updateAutoKey();
+    });
+
+    el.querySelector('.eventIndex')?.addEventListener('input', e => { 
+        pair.eventIndex = +e.target.value || 0; 
+        updateAutoKey();
+    });
+
+    el.querySelector('.lineId')?.addEventListener('input', e => { 
+        pair.lineId = +e.target.value || 1; 
+        updateAutoKey();
+    });
+
+    el.querySelector('.delete').addEventListener('click', () => {
         pairs = pairs.filter(p => p.id !== id);
         el.remove();
         updatePreview();
-    };
+    });
 
     if (gmCheckbox.checked) gmCheckbox.dispatchEvent(new Event('change'));
-    updateKey(pair);
+
+    updatePreview(); // сразу обновляем превью после добавления
 
     setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
 }
@@ -174,28 +206,43 @@ gmCheckbox.onchange = () => {
     document.querySelectorAll('.gm-only').forEach(e =>
         e.classList.toggle('hidden', !gmCheckbox.checked)
     );
-    pairs.forEach(updateKey);
+    pairs.forEach(p => {
+        const el = pairsContainer.querySelector(`.pair[data-id="${p.id}"]`);
+        if (!el.querySelector('.key').value && p.resource) updateKey(p);
+    });
 };
 
 /* ---------- KEY + PREVIEW ---------- */
 function updateKey(pair) {
-    if (!gmCheckbox.checked) {
-        pair.key = pair.resource;
-    } else {
-        let key = resourceTypes[pair.resourceType] + pair.resource;
-        if (pair.resourceType === 'Object') {
-            const evt = baseEvents[pair.eventType];
-            key += '_' + (evt.needsIndex ? evt.format(pair.eventIndex) : evt.format);
-        }
-        key += `_line_${pair.lineId}_0`;
-        pair.key = key;
+    let key = resourceTypes[pair.resourceType] + pair.resource;
+    if (pair.resourceType === 'Object') {
+        const evt = baseEvents[pair.eventType];
+        key += '_' + (evt.needsIndex ? evt.format(pair.eventIndex) : evt.format);
     }
+    key += `_line_${pair.lineId}_0`;
+    pair.key = key;
+
+    const el = pairsContainer.querySelector(`.pair[data-id="${pair.id}"]`);
+    if (el && !el.querySelector('.key').value) el.querySelector('.key').value = key;
+
     updatePreview();
 }
 
+// Превью показывает все пары сразу, даже если ключ пустой — временно генерируется для отображения
 function updatePreview() {
     const obj = {};
-    pairs.forEach(p => p.key && (obj[p.key] = p.value));
+    pairs.forEach(p => {
+        let keyForPreview = p.key;
+        if (!keyForPreview && p.resource) {
+            keyForPreview = resourceTypes[p.resourceType] + p.resource;
+            if (p.resourceType === 'Object') {
+                const evt = baseEvents[p.eventType];
+                keyForPreview += '_' + (evt.needsIndex ? evt.format(p.eventIndex) : evt.format);
+            }
+            keyForPreview += `_line_${p.lineId}_0`;
+        }
+        if (keyForPreview) obj[keyForPreview] = p.value;
+    });
     preview.textContent = JSON.stringify(obj, null, 4);
 }
 
@@ -229,10 +276,10 @@ function syncPairsFromDOM() {
 /* ---------- AUTO SORT ---------- */
 sortBtn.onclick = () => {
     pairs.sort((a, b) => smartCompare(a.key, b.key));
-    pairsContainer.innerHTML = '';
-    pairs.forEach(p => pairsContainer.appendChild(
-        document.querySelector(`.pair[data-id="${p.id}"]`)
-    ));
+    pairs.forEach(p => {
+        const el = pairsContainer.querySelector(`.pair[data-id="${p.id}"]`);
+        pairsContainer.appendChild(el);
+    });
     updatePreview();
 };
 
@@ -266,7 +313,7 @@ fileInput.onchange = e => {
         pairsContainer.innerHTML = '';
         pairs = [];
         const data = JSON.parse(reader.result);
-        Object.entries(data).forEach(([k,v]) => addPair({ resource: k, value: v }));
+        Object.entries(data).forEach(([k,v]) => addPair({ key: k, value: v }));
     };
     reader.readAsText(file);
 };
