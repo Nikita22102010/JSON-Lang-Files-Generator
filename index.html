@@ -228,12 +228,11 @@ function updateKey(pair) {
 
 // Новая версия превью: сохраняем слэши и пробелы
 function updatePreview() {
-    const lines = pairs.map(p => {
-        const key = p.key || '';
-        const value = p.value || '';
-        return `    "${key}": "${value}"`;
+    const obj = {};
+    pairs.forEach(p => {
+        if (p.key) obj[p.key] = p.value || "";
     });
-    preview.textContent = "{\n" + lines.join(",\n") + "\n}";
+    preview.textContent = JSON.stringify(obj, null, 4);
 }
 
 /* ---------- DRAG & DROP ---------- */
