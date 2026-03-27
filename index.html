@@ -231,7 +231,7 @@ function updatePreview() {
     const lines = pairs.map(p => {
         const key = p.key || '';
         const value = p.value || '';
-        return `"${key}": "${value}"`;
+        return `    "${key}": "${value}"`;
     });
     preview.textContent = "{\n" + lines.join(",\n") + "\n}";
 }
