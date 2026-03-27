@@ -39,7 +39,7 @@
 
     <div id="pairs" class="space-y-3"></div>
 
-    <h2 class="mt-6 font-semibold">JSON Preview</h2>
+    <h2 class="mt-6 font-semibold">JSON Preview (exact saved file)</h2>
     <pre id="preview" class="bg-gray-100 p-4 rounded text-sm mt-2"></pre>
 </div>
 
@@ -51,7 +51,6 @@
 <script>
 document.addEventListener('DOMContentLoaded', () => {
 
-const gmCheckbox = document.getElementById('gmCheckbox');
 const addBtn = document.getElementById('addBtn');
 const pairsContainer = document.getElementById('pairs');
 const preview = document.getElementById('preview');
@@ -63,239 +62,95 @@ const fileNameInput = document.getElementById('fileNameInput');
 
 let pairs = [];
 let loadedFileName = '';
-let draggedEl = null;
-
-const resourceTypes = {
-    Object: 'gml_Object_',
-    Script: 'gml_Script_',
-    Room: 'gml_Room_',
-    Timeline: 'gml_Timeline_'
-};
-
-const baseEvents = {
-    Create: { needsIndex: false, format: 'Create_0' },
-    BeginStep: { needsIndex: false, format: 'Step_1' },
-    Step: { needsIndex: false, format: 'Step_0' },
-    EndStep: { needsIndex: false, format: 'Step_2' },
-    Draw: { needsIndex: false, format: 'Draw_0' },
-    Alarm: { needsIndex: true, format: i => `Alarm_${i}` },
-    User: { needsIndex: true, format: i => `User_${i}` }
-};
 
 /* ---------- ADD PAIR ---------- */
-addBtn.addEventListener('click', () => addPair());
+addBtn.onclick = () => addPair();
 
 function addPair(initial = {}) {
-    const id = crypto.randomUUID();
-
     const pair = {
-        id,
-        resource: initial.resource || '',
-        resourceType: initial.resourceType || 'Object',
-        eventType: initial.eventType || 'Create',
-        eventIndex: initial.eventIndex ?? 0,
-        lineId: initial.lineId ?? 1,
-        value: initial.value || '',
-        key: initial.key || ''
+        id: crypto.randomUUID(),
+        key: initial.key || '',
+        value: initial.value || ''
     };
     pairs.push(pair);
 
     const el = document.createElement('div');
     el.className = 'border p-4 rounded bg-gray-50 pair';
-    el.dataset.id = id;
-    el.draggable = true;
+    el.dataset.id = pair.id;
 
     el.innerHTML = `
-    <div class="grid grid-cols-1 md:grid-cols-8 gap-3 items-end">
-        <div class="col-span-3">
-            <label class="text-sm">Key</label>
-            <input class="key w-full border rounded px-2 py-1 bg-white" value="${pair.key}">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+                <label class="text-sm">Key</label>
+                <input class="key w-full border rounded px-2 py-1" value="${pair.key}">
+            </div>
+            <div>
+                <label class="text-sm">Value</label>
+                <textarea class="value w-full border rounded px-2 py-1" rows="2">${pair.value}</textarea>
+            </div>
         </div>
-
-        <div class="col-span-3">
-            <label class="text-sm">Value</label>
-            <textarea class="value w-full border rounded px-2 py-1" rows="2">${pair.value}</textarea>
-        </div>
-
-        <div class="col-span-2 gm-only hidden flex flex-col gap-2">
-            <label class="text-sm">Resource</label>
-            <input class="resource w-full border rounded px-2 py-1" value="${pair.resource}">
-
-            <label class="text-sm">Resource Type</label>
-            <select class="resourceType w-full border rounded px-2 py-1">
-                ${Object.keys(resourceTypes).map(r =>
-                    `<option ${pair.resourceType===r?'selected':''}>${r}</option>`
-                ).join('')}
-            </select>
-
-            <label class="text-sm">Event</label>
-            <select class="eventType w-full border rounded px-2 py-1">
-                ${Object.keys(baseEvents).map(e =>
-                    `<option ${pair.eventType===e?'selected':''}>${e}</option>`
-                ).join('')}
-            </select>
-
-            <label class="text-sm">Index</label>
-            <input type="number" class="eventIndex w-full border rounded px-2 py-1" value="${pair.eventIndex}">
-
-            <label class="text-sm">Line ID</label>
-            <input type="number" class="lineId w-full border rounded px-2 py-1" value="${pair.lineId}">
-        </div>
-    </div>
-    <button class="mt-3 text-red-600 delete">Delete</button>
+        <button class="mt-3 text-red-600 delete">Delete</button>
     `;
 
     pairsContainer.appendChild(el);
 
-    // Event listeners
-    el.querySelector('.key').addEventListener('input', e => { 
-        pair.key = e.target.value; 
-        updatePreview(); 
-    });
-
-    el.querySelector('.value').addEventListener('input', e => { 
-        pair.value = e.target.value; 
-        updatePreview(); 
-    });
-
-    const updateAutoKey = () => {
-        if (!el.querySelector('.key').value && pair.resource) updateKey(pair);
+    el.querySelector('.key').oninput = e => {
+        pair.key = e.target.value;
+        updatePreview();
     };
 
-    el.querySelector('.resource')?.addEventListener('input', e => { 
-        pair.resource = e.target.value; 
-        updateAutoKey();
-    });
+    el.querySelector('.value').oninput = e => {
+        pair.value = e.target.value;
+        updatePreview();
+    };
 
-    el.querySelector('.resourceType')?.addEventListener('change', e => { 
-        pair.resourceType = e.target.value; 
-        updateAutoKey();
-    });
-
-    el.querySelector('.eventType')?.addEventListener('change', e => { 
-        pair.eventType = e.target.value; 
-        updateAutoKey();
-    });
-
-    el.querySelector('.eventIndex')?.addEventListener('input', e => { 
-        pair.eventIndex = +e.target.value || 0; 
-        updateAutoKey();
-    });
-
-    el.querySelector('.lineId')?.addEventListener('input', e => { 
-        pair.lineId = +e.target.value || 1; 
-        updateAutoKey();
-    });
-
-    el.querySelector('.delete').addEventListener('click', () => {
-        pairs = pairs.filter(p => p.id !== id);
+    el.querySelector('.delete').onclick = () => {
+        pairs = pairs.filter(p => p.id !== pair.id);
         el.remove();
         updatePreview();
-    });
-
-    if (gmCheckbox.checked) gmCheckbox.dispatchEvent(new Event('change'));
-
-    updatePreview();
-    setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
-}
-
-/* ---------- GM MODE ---------- */
-gmCheckbox.onchange = () => {
-    document.querySelectorAll('.gm-only').forEach(e =>
-        e.classList.toggle('hidden', !gmCheckbox.checked)
-    );
-    pairs.forEach(p => {
-        const el = pairsContainer.querySelector(`.pair[data-id="${p.id}"]`);
-        if (!el.querySelector('.key').value && p.resource) updateKey(p);
-    });
-};
-
-/* ---------- KEY + PREVIEW ---------- */
-function updateKey(pair) {
-    let key = resourceTypes[pair.resourceType] + pair.resource;
-    if (pair.resourceType === 'Object') {
-        const evt = baseEvents[pair.eventType];
-        key += '_' + (evt.needsIndex ? evt.format(pair.eventIndex) : evt.format);
-    }
-    key += `_line_${pair.lineId}_0`;
-    pair.key = key;
-
-    const el = pairsContainer.querySelector(`.pair[data-id="${pair.id}"]`);
-    if (el && !el.querySelector('.key').value) el.querySelector('.key').value = key;
+    };
 
     updatePreview();
 }
 
-// Новая версия превью: сохраняем слэши и пробелы
+/* ---------- PREVIEW (TRUE JSON) ---------- */
 function updatePreview() {
     const obj = {};
     pairs.forEach(p => {
-        if (p.key) obj[p.key] = p.value || "";
+        if (p.key) obj[p.key] = p.value;
     });
     preview.textContent = JSON.stringify(obj, null, 4);
 }
 
-/* ---------- DRAG & DROP ---------- */
-pairsContainer.addEventListener('dragstart', e => {
-    if (!e.target.classList.contains('pair')) return;
-    draggedEl = e.target;
-    e.target.classList.add('opacity-50');
-});
-
-pairsContainer.addEventListener('dragend', () => {
-    draggedEl?.classList.remove('opacity-50');
-    draggedEl = null;
-    syncPairsFromDOM();
-});
-
-pairsContainer.addEventListener('dragover', e => {
-    e.preventDefault();
-    const after = [...pairsContainer.children].find(el =>
-        e.clientY < el.getBoundingClientRect().top + el.offsetHeight / 2
-    );
-    after ? pairsContainer.insertBefore(draggedEl, after) : pairsContainer.appendChild(draggedEl);
-});
-
-function syncPairsFromDOM() {
-    const ids = [...pairsContainer.children].map(e => e.dataset.id);
-    pairs = ids.map(id => pairs.find(p => p.id === id));
-    updatePreview();
-}
-
-/* ---------- AUTO SORT ---------- */
-sortBtn.onclick = () => {
-    pairs.sort((a, b) => smartCompare(a.key, b.key));
-    pairs.forEach(p => {
-        const el = pairsContainer.querySelector(`.pair[data-id="${p.id}"]`);
-        pairsContainer.appendChild(el);
-    });
-    updatePreview();
-};
-
-function smartCompare(a, b) {
-    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
-}
-
-/* ---------- SAVE / LOAD ---------- */
+/* ---------- SAVE ---------- */
 saveBtn.onclick = () => {
     const obj = {};
-    pairs.forEach(p => p.key && (obj[p.key] = p.value));
+    pairs.forEach(p => {
+        if (p.key) obj[p.key] = p.value;
+    });
+
     let name = fileNameInput.value || loadedFileName || 'data';
     if (!name.endsWith('.json')) name += '.json';
-    const blob = new Blob([JSON.stringify(obj, null, 4)], {type:'application/json'});
+
+    const blob = new Blob(
+        [JSON.stringify(obj, null, 4)],
+        { type: 'application/json' }
+    );
+
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = name;
     a.click();
 };
 
-// Псевдо-JSON загрузка
+/* ---------- LOAD ---------- */
 loadBtn.onclick = () => fileInput.click();
 
 fileInput.onchange = e => {
     const file = e.target.files[0];
     if (!file) return;
-    loadedFileName = file.name.replace(/\.json$/i,'');
+
+    loadedFileName = file.name.replace(/\.json$/i, '');
     fileNameInput.value = loadedFileName;
 
     const reader = new FileReader();
@@ -303,17 +158,22 @@ fileInput.onchange = e => {
         pairsContainer.innerHTML = '';
         pairs = [];
 
-        const lines = reader.result.split(/\r?\n/).filter(l => l.includes(':'));
-        lines.forEach(line => {
-            const match = line.match(/"(.+?)"\s*:\s*"(.*)"/);
-            if (match) {
-                const key = match[1];
-                const value = match[2];
-                addPair({ key, value });
-            }
+        const json = JSON.parse(reader.result);
+        Object.entries(json).forEach(([key, value]) => {
+            addPair({ key, value: String(value) });
         });
     };
     reader.readAsText(file);
+};
+
+/* ---------- SORT ---------- */
+sortBtn.onclick = () => {
+    pairs.sort((a, b) => a.key.localeCompare(b.key, undefined, { numeric: true }));
+    pairs.forEach(p => {
+        const el = pairsContainer.querySelector(`[data-id="${p.id}"]`);
+        pairsContainer.appendChild(el);
+    });
+    updatePreview();
 };
 
 /* ---------- INIT ---------- */
