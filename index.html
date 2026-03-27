@@ -43,7 +43,6 @@
     <pre id="preview" class="bg-gray-100 p-4 rounded text-sm mt-2"></pre>
 </div>
 
-<!-- FIXED ADD BUTTON -->
 <button id="addBtn"
     class="fixed bottom-6 right-6 px-6 py-3 bg-blue-600 text-white rounded-full shadow-lg z-50">
     + Add Pair
@@ -115,7 +114,7 @@ function addPair(initial = {}) {
 
         <div class="col-span-3">
             <label class="text-sm">Value</label>
-            <input class="value w-full border rounded px-2 py-1" value="${pair.value}">
+            <textarea class="value w-full border rounded px-2 py-1" rows="2">${pair.value}</textarea>
         </div>
 
         <div class="col-span-2 gm-only hidden flex flex-col gap-2">
@@ -196,8 +195,7 @@ function addPair(initial = {}) {
 
     if (gmCheckbox.checked) gmCheckbox.dispatchEvent(new Event('change'));
 
-    updatePreview(); // сразу обновляем превью после добавления
-
+    updatePreview();
     setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
 }
 
@@ -228,22 +226,14 @@ function updateKey(pair) {
     updatePreview();
 }
 
-// Превью показывает все пары сразу, даже если ключ пустой — временно генерируется для отображения
+// Новая версия превью: сохраняем слэши и пробелы
 function updatePreview() {
-    const obj = {};
-    pairs.forEach(p => {
-        let keyForPreview = p.key;
-        if (!keyForPreview && p.resource) {
-            keyForPreview = resourceTypes[p.resourceType] + p.resource;
-            if (p.resourceType === 'Object') {
-                const evt = baseEvents[p.eventType];
-                keyForPreview += '_' + (evt.needsIndex ? evt.format(p.eventIndex) : evt.format);
-            }
-            keyForPreview += `_line_${p.lineId}_0`;
-        }
-        if (keyForPreview) obj[keyForPreview] = p.value;
+    const lines = pairs.map(p => {
+        const key = p.key || '';
+        const value = p.value || '';
+        return `"${key}": "${value}"`;
     });
-    preview.textContent = JSON.stringify(obj, null, 4);
+    preview.textContent = "{\n" + lines.join(",\n") + "\n}";
 }
 
 /* ---------- DRAG & DROP ---------- */
@@ -300,6 +290,7 @@ saveBtn.onclick = () => {
     a.click();
 };
 
+// Псевдо-JSON загрузка
 loadBtn.onclick = () => fileInput.click();
 
 fileInput.onchange = e => {
@@ -312,8 +303,16 @@ fileInput.onchange = e => {
     reader.onload = () => {
         pairsContainer.innerHTML = '';
         pairs = [];
-        const data = JSON.parse(reader.result);
-        Object.entries(data).forEach(([k,v]) => addPair({ key: k, value: v }));
+
+        const lines = reader.result.split(/\r?\n/).filter(l => l.includes(':'));
+        lines.forEach(line => {
+            const match = line.match(/"(.+?)"\s*:\s*"(.*)"/);
+            if (match) {
+                const key = match[1];
+                const value = match[2];
+                addPair({ key, value });
+            }
+        });
     };
     reader.readAsText(file);
 };
